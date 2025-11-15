@@ -4,6 +4,7 @@ const morgan = require('morgan');
 
 const usersRouter = require('./routes/userRoutes');
 const authRouter = require('./routes/authRoutes');
+const roleRoutes = require("./routes/roleRoutes");
 
 const createApp = () => {
   const app = express();
@@ -16,6 +17,7 @@ const createApp = () => {
   // Routes
   app.use('/api/users', usersRouter);
   app.use('/api/auth', authRouter);
+  app.use("/api/roles", roleRoutes);
 
   // Health check
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
