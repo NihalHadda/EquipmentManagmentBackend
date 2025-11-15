@@ -1,3 +1,25 @@
+<<<<<<< HEAD
 node_modules/
 .env
 .DS_Store
+=======
+# Dépendances
+node_modules/
+
+# Variables d'environnement
+.env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+
+# Système
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+>>>>>>> d60785a24b7388633b15ed85a41f002818914dbd

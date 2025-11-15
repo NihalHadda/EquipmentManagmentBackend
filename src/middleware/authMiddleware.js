@@ -1,34 +1,53 @@
-// import jwt from "jsonwebtoken";
-// import dotenv from "dotenv";
+// middlewares/authMiddleware.js
+// ============================================
+// Middleware pour protéger les routes
+// ============================================
 
-// dotenv.config();
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
-// export const protect = (req, res, next) => {
-//   const token = req.headers.authorization?.split(" ")[1];
-//   if (!token) return res.status(401).json({ message: "Accès refusé, token manquant" });
-
-//   try {
-//     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-//     req.user = decoded;
-//     next();
-//   } catch (err) {
-//     res.status(401).json({ message: "Token invalide" });
-//   }
-// };
-
-
-const jwt = require("jsonwebtoken");
-require("dotenv").config();
-
+/**
+ * Middleware pour vérifier l'authentification
+ */
 exports.protect = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "Accès refusé, token manquant" });
-
   try {
+    const authHeader = req.headers.authorization;
+    console.log(authHeader)
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ 
+        message: 'Accès refusé, token manquant' 
+      });
+    }
+
+    const token = authHeader.split(' ')[1];
+
     const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-    req.user = decoded;
+
+    req.user = {
+      id: decoded.id,
+      role: decoded.role
+    };
+
     next();
+
   } catch (err) {
-    res.status(401).json({ message: "Token invalide" });
+    console.error('Erreur de vérification du token:', err.message);
+    
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ 
+        message: 'Token invalide' 
+      });
+    }
+    
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        message: 'Token expiré, veuillez vous reconnecter' 
+      });
+    }
+
+    return res.status(401).json({ 
+      message: 'Erreur d\'authentification' 
+    });
   }
 };
