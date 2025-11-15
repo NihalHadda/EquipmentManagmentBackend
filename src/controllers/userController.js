@@ -1,5 +1,5 @@
 
-const User = require('../models/userModel');
+const User = require('../models/User');
 const Role = require('../models/role'); // ✅ Ajouter cette ligne
 const bcrypt = require("bcryptjs");
 const crypto = require('crypto');
