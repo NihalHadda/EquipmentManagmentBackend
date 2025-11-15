@@ -1,14 +1,31 @@
-import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
+// import jwt from "jsonwebtoken";
+// import dotenv from "dotenv";
 
-dotenv.config();
+// dotenv.config();
 
-export const protect = (req, res, next) => {
+// export const protect = (req, res, next) => {
+//   const token = req.headers.authorization?.split(" ")[1];
+//   if (!token) return res.status(401).json({ message: "Accès refusé, token manquant" });
+
+//   try {
+//     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+//     req.user = decoded;
+//     next();
+//   } catch (err) {
+//     res.status(401).json({ message: "Token invalide" });
+//   }
+// };
+
+
+const jwt = require("jsonwebtoken");
+require("dotenv").config();
+
+exports.protect = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ message: "Accès refusé, token manquant" });
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
     req.user = decoded;
     next();
   } catch (err) {

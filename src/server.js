@@ -9,7 +9,6 @@ if (!MONGO_URI) {
   console.error('MONGO_URI is not set. Please configure your .env');
   process.exit(1);
 }
-
 const app = createApp();
 
 connectDB(MONGO_URI).then(() => {
