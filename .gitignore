@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-node_modules/
-.env
-.DS_Store
-=======
 # Dépendances
 node_modules/
 
@@ -15,11 +10,10 @@ node_modules/
 logs/
 *.log
 
-# Système
+# Fichiers système
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE / Éditeurs
 .vscode/
 .idea/
->>>>>>> d60785a24b7388633b15ed85a41f002818914dbd
