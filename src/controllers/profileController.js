@@ -25,7 +25,7 @@ exports.validateProfileUpdate = (data) => {
   return errors;
 };
 
-// Fonction utilitaire pour récupérer l'ID utilisateur valide
+// Fonction utilitaire
 const getUserId = (req) => {
   const userId = req.user._id.toString().trim();
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -34,7 +34,7 @@ const getUserId = (req) => {
   return userId;
 };
 
-// GET - Récupérer le profil de l'utilisateur connecté
+// GET - Récupérer le profil
 exports.getProfile = async (req, res) => {
   try {
     const userId = getUserId(req);
@@ -72,7 +72,6 @@ exports.updateProfile = async (req, res) => {
       preferences
     } = req.body;
 
-    // Validation
     const validationErrors = exports.validateProfileUpdate(req.body);
     if (validationErrors.length > 0) {
       return res.status(400).json({
@@ -82,7 +81,6 @@ exports.updateProfile = async (req, res) => {
       });
     }
 
-    // Construire l'objet de mise à jour
     const updateData = {};
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
@@ -95,7 +93,6 @@ exports.updateProfile = async (req, res) => {
       };
     }
 
-    // Mise à jour
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: updateData },
@@ -136,7 +133,6 @@ exports.updateEmail = async (req, res) => {
       });
     }
 
-    // Vérifier le mot de passe actuel
     const user = await User.findById(userId).select('+password');
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
@@ -147,7 +143,6 @@ exports.updateEmail = async (req, res) => {
       });
     }
 
-    // Vérifier si l'email existe déjà
     const emailExists = await User.findOne({ email: newEmail });
     if (emailExists) {
       return res.status(400).json({
@@ -156,7 +151,6 @@ exports.updateEmail = async (req, res) => {
       });
     }
 
-    // Mettre à jour l'email
     user.email = newEmail;
     await user.save();
 
@@ -193,7 +187,6 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Vérifier le mot de passe actuel
     const user = await User.findById(userId).select('+password');
     const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
 
@@ -204,7 +197,6 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Hash et sauvegarder le nouveau mot de passe
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
 
@@ -234,7 +226,6 @@ exports.deactivateAccount = async (req, res) => {
       });
     }
 
-    // Vérifier le mot de passe
     const user = await User.findById(userId).select('+password');
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
@@ -245,7 +236,6 @@ exports.deactivateAccount = async (req, res) => {
       });
     }
 
-    // Désactiver le compte
     user.isActive = false;
     await user.save();
 
