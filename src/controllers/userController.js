@@ -50,6 +50,7 @@
 // };
 
 const User = require('../models/user');
+const Role = require('../models/role'); // ✅ Ajouter cette ligne
 const bcrypt = require("bcryptjs");
 
 // GET ALL USERS (admin only)
@@ -110,5 +111,15 @@ exports.deleteUser = async (req, res) => {
     res.json({ message: "User deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: "Error deleting user" });
+  }
+};
+
+// 🔹 Supprimer un utilisateur
+exports.deleteUser = async (req, res, next) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ message: "Utilisateur supprimé" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
