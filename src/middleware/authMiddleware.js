@@ -1,74 +1,52 @@
-// middlewares/authMiddleware.js
-// ============================================
-// Middleware pour protéger les routes
-// ============================================
 
-// Importation du module jsonwebtoken pour gérer les JWT (JSON Web Tokens)
-const jwt = require('jsonwebtoken');
 
-// Chargement des variables d'environnement depuis le fichier .env
-require('dotenv').config();
+const jwt = require("jsonwebtoken");
+const User = require("../models/user");
+require("dotenv").config();
 
-/**
- * Middleware pour vérifier l'authentification
- * Ce middleware vérifie si l'utilisateur possède un token JWT valide
- */
-exports.protect = (req, res, next) => {
+// ---------------------- PROTECT (auth middleware) ----------------------
+exports.protect = async (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token)
+    return res.status(401).json({ message: "Accès refusé : token manquant" });
+
   try {
-    // Récupération de l'en-tête "Authorization" de la requête HTTP
-    const authHeader = req.headers.authorization;
-    
-    // Affichage du contenu de l'en-tête dans la console (pour débogage)
-    console.log(authHeader)
+    // Vérifier le token
+    const decoded = jwt.verify(
+      token,
+      process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET
+    );
 
-    // Vérification si l'en-tête Authorization existe et commence par "Bearer "
-    // Format attendu: "Bearer <token>"
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      // Si l'en-tête est absent ou mal formaté, retourner une erreur 401 (Non autorisé)
-      return res.status(401).json({ 
-        message: 'Accès refusé, token manquant' 
-      });
-    }
+    // Charger l'utilisateur depuis la DB + role
+    const user = await User.findById(decoded.id).populate("role");
+    if (!user)
+      return res.status(401).json({ message: "Utilisateur introuvable" });
 
-    // Extraction du token JWT en supprimant le préfixe "Bearer "
-    // split(' ')[1] récupère la partie après l'espace
-    const token = authHeader.split(' ')[1];
-
-    // Vérification et décodage du token avec la clé secrète stockée dans les variables d'environnement
-    // Si le token est invalide ou expiré, une exception sera levée
-    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-
-    // Ajout des informations de l'utilisateur décodées à l'objet req
-    // Cela permet aux routes suivantes d'accéder aux données de l'utilisateur
-    req.user = {
-      id: decoded.id,       // ID de l'utilisateur extrait du token
-      role: decoded.role    // Rôle de l'utilisateur (ex: admin, user)
-    };
-
-    // Appel de next() pour passer au middleware ou à la route suivante
+    req.user = user;
     next();
 
   } catch (err) {
-    // En cas d'erreur, afficher le message d'erreur dans la console
-    console.error('Erreur de vérification du token:', err.message);
-    
-    // Vérification du type d'erreur: token mal formé ou signature invalide
-    if (err.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
-        message: 'Token invalide' 
-      });
-    }
-    
-    // Vérification si le token a expiré
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
-        message: 'Token expiré, veuillez vous reconnecter' 
-      });
+    return res.status(401).json({ message: "Token invalide" });
+  }
+};
+
+// ---------------------- AUTHORIZE ROLE ----------------------
+exports.authorizeRole = (requiredRole) => {
+  return (req, res, next) => {
+    if (!req.user || !req.user.role) {
+      return res.status(403).json({ message: "Accès refusé" });
     }
 
-    // Pour toute autre erreur d'authentification non spécifiée
-    return res.status(401).json({ 
-      message: 'Erreur d\'authentification' 
-    });
-  }
+    // Case : role object (populate) → use role.name
+    const roleName = typeof req.user.role === "string"
+      ? req.user.role
+      : req.user.role.name;
+
+    if (roleName !== requiredRole) {
+      return res.status(403).json({ message: "Permission refusée" });
+    }
+
+    next();
+  };
 };

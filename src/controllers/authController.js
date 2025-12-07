@@ -1,75 +1,173 @@
-// Importation du modèle User pour interagir avec la collection users dans MongoDB
-const User = require('../models/User');
-
-// Importation de bcryptjs pour comparer les mots de passe hashés
+const User = require("../models/user");
+const Role = require("../models/role");
 const bcrypt = require("bcryptjs");
-
-// Importation de jsonwebtoken pour créer et signer des tokens JWT
 const jwt = require("jsonwebtoken");
 
-/**
- * Fonction de connexion (login)
- * Authentifie un utilisateur et génère un token JWT
- */
+// ---------------------- LOGIN ----------------------
 exports.login = async (req, res) => {
-  // Extraction de l'email et du mot de passe depuis le corps de la requête
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  // Vérification si l'email et le mot de passe sont fournis
-  if (!email || !password) {
-    // Si l'un des deux est manquant, retourner une erreur 400 (Bad Request)
-    return res.status(400).json({ message: "Email et mot de passe requis" });
+    if (!email || !password)
+      return res.status(400).json({ message: "Email et mot de passe requis" });
+
+    // Récupérer l'utilisateur + role
+    const user = await User.findOne({ email }).populate("role");
+    if (!user)
+      return res.status(400).json({ message: "Email ou mot de passe incorrect" });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match)
+      return res.status(400).json({ message: "Email ou mot de passe incorrect" });
+
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    return res.json({
+      message: "Connexion réussie",
+      token,
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        role: typeof user.role === "string" ? user.role : user.role.name
+      }
+    });
+
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
-
-  // Recherche de l'utilisateur dans la base de données par son email
-  // findOne() retourne le premier document correspondant ou null si aucun n'est trouvé
-  const user = await User.findOne({ email });
-  
-  // Si aucun utilisateur n'est trouvé avec cet email
-  if (!user) {
-    // Retourner une erreur 404 (Not Found) avec un message volontairement vague
-    // (pour des raisons de sécurité, on ne précise pas si c'est l'email ou le mot de passe qui est incorrect)
-    return res.status(404).json({ message: "Email ou mot de passe incorrect" });
-  }
-
-  // Comparaison du mot de passe fourni avec le mot de passe hashé stocké en base
-  // bcrypt.compare() déchiffre et compare de manière sécurisée
-  const isMatch = await bcrypt.compare(password, user.password);
-  
-  // Si les mots de passe ne correspondent pas
-  if (!isMatch) {
-    // Retourner une erreur 400 (Bad Request) avec le même message vague
-    return res.status(400).json({ message: "Email ou mot de passe incorrect" });
-  }
-
-  // Récupération de la clé secrète depuis les variables d'environnement
-  // Cette clé sert à signer le token JWT
-  const SECRETKEY = process.env.ACCESS_TOKEN_SECRET;
-  
-  // Création d'un token JWT contenant l'ID de l'utilisateur
-  // jwt.sign() prend 3 paramètres:
-  // 1. Payload (données à encoder): { id: user.id }
-  // 2. Clé secrète: SECRETKEY
-  // 3. Options: { expiresIn: "1h" } - le token expire après 1 heure
-  const token = jwt.sign({ id: user.id }, SECRETKEY, { expiresIn: "1h" });
-
-  // Retour d'une réponse 200 (OK) avec un message de succès, l'email et le token
-  // Le client devra stocker ce token (localStorage, sessionStorage, cookie)
-  // et l'envoyer dans les requêtes futures pour s'authentifier
-  return res.status(200).json({ message: "Connexion réussie", email, token });
 };
 
-/**
- * Fonction de déconnexion (logout)
- * Note: Avec JWT, la déconnexion est gérée côté client
- */
-exports.logout = (req, res) => {
-  // Les JWT sont stateless (sans état), donc le serveur ne stocke pas les tokens
-  // Il n'y a donc rien à supprimer côté serveur lors de la déconnexion
-  
-  // On informe simplement le client qu'il doit supprimer le token de son côté
-  // (par exemple, en le retirant du localStorage ou sessionStorage)
-  return res.status(200).json({ 
-    message: "Déconnexion réussie, supprimez le token côté client" 
-  });
+// ---------------------- REGISTER ----------------------
+// exports.register = async (req, res) => {
+//   try {
+//     const { username, email, password, roleName } = req.body;
+
+//     if (!username || !email || !password)
+//       return res.status(400).json({ message: "Champs obligatoires manquants" });
+
+//     const existing = await User.findOne({ email });
+//     if (existing)
+//       return res.status(400).json({ message: "Email déjà utilisé" });
+
+//     const role = await Role.findOne({ name: roleName || "user" });
+//     if (!role)
+//       return res.status(400).json({ message: "Role non trouvé" });
+
+//     const hashed = await bcrypt.hash(password, 10);
+
+//     const user = await User.create({
+//       username,
+//       email,
+//       password: hashed,
+//       role: role._id
+//     });
+
+//     const userPop = await User.findById(user._id).populate("role", "name permissions");
+
+//     return res.status(201).json({
+//       message: "Utilisateur créé",
+//       user: {
+//         _id: userPop._id,
+//         username: userPop.username,
+//         email: userPop.email,
+//         role: userPop.role.name
+//       }
+//     });
+
+//   } catch (err) {
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
+// exports.register = async (req, res) => {
+//   try {
+//     console.log("📩 REQ BODY:", req.body);
+
+//     const { username, email, password, roleName } = req.body;
+
+//     if (!username || !email || !password)
+//       return res.status(400).json({ message: "Champs obligatoires manquants" });
+
+//     const existing = await User.findOne({ email });
+//     if (existing)
+//       return res.status(400).json({ message: "Email déjà utilisé" });
+
+//     console.log("🔍 Recherche role:", roleName);
+//     const role = await Role.findOne({ name: roleName });
+
+//     console.log("📌 Role trouvé:", role);
+
+//     if (!role)
+//       return res.status(400).json({ message: "Role non trouvé" });
+
+//     const hashed = await bcrypt.hash(password, 10);
+
+//     const user = await User.create({
+//       username,
+//       email,
+//       password: hashed,
+//       role: role._id
+//     });
+
+//     return res.status(201).json({ message: "Utilisateur créé" });
+
+//   } catch (err) {
+//     console.error("❌ ERROR REGISTER:", err);
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
+exports.register = async (req, res) => {
+  try {
+    console.log("📩 REQ BODY:", req.body);
+
+    const { username, email, password, roleName } = req.body;
+
+    // ضع هذا اللوق هنا
+    console.log("🔍 Recherche role:", roleName);
+
+    if (!username || !email || !password)
+      return res.status(400).json({ message: "Champs obligatoires manquants" });
+
+    const existing = await User.findOne({ email });
+    if (existing)
+      return res.status(400).json({ message: "Email déjà utilisé" });
+
+const role = await Role.findOne({ name: { $regex: `^${roleName}$`, $options: 'i' } });
+
+    // هذا اللوق بعد ما تبحث على role
+    console.log("📌 Role trouvé:", role);
+
+    if (!role)
+      return res.status(400).json({ message: "Role non trouvé" });
+
+    const hashed = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      username,
+      email,
+      password: hashed,
+      role: role._id
+    });
+
+    return res.status(201).json({ message: "Utilisateur créé" });
+
+  } catch (err) {
+    console.error("❌ ERROR REGISTER:", err);
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+// ---------------------- LOGOUT ----------------------
+exports.logout = async (req, res) => {
+  try {
+    return res.json({ message: "Déconnecté avec succès" });
+  } catch (error) {
+    return res.status(500).json({ message: "Erreur serveur" });
+  }
 };
