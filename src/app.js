@@ -5,7 +5,8 @@ const morgan = require('morgan');
 const usersRouter = require('./routes/userRoutes');
 const authRouter = require('./routes/authRoutes');
 const roleRoutes = require("./routes/roleRoutes");
-
+const equipmentRoutes = require('./routes/equipmentRoutes');
+const reservationRoutes = require('./routes/reservationRoutes');
 const createApp = () => {
   const app = express();
 
@@ -18,6 +19,9 @@ const createApp = () => {
   app.use('/api/users', usersRouter);
   app.use('/api/auth', authRouter);
   app.use("/api/roles", roleRoutes);
+  app.use('/api/equipments', equipmentRoutes); 
+  app.use('/api/reservations', reservationRoutes);
+
 
   // Health check
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
