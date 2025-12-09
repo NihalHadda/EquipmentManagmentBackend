@@ -2,20 +2,30 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 
-const usersRouter = require('./routes/users');
 const authRouter = require('./routes/authRoutes');
+const usersRouter = require('./routes/userRoutes');
+const equipmentRoutes = require('./routes/equipmentRoutes');
 
 const createApp = () => {
   const app = express();
 
   // Middlewares
   app.use(morgan('dev'));
-  app.use(cors());
-  app.use(express.json());
+  
+  // CORS configuré pour le frontend sur port 5173
+  app.use(cors({
+    origin: 'http://localhost:5173',
+    credentials: true
+  }));
+  
+  // Augmenter la limite pour les images base64
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Routes
   app.use('/api/users', usersRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/equipments', equipmentRoutes); // ✅ Route équipements
 
   // Health check
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
