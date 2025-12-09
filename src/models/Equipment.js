@@ -28,7 +28,7 @@ const equipmentSchema = new mongoose.Schema({
       enum: ['kg', 'litres', 'personnes', 'unités', 'watts', 'autres']
     }
   },
-  type: {
+  type: { 
     type: String,
     required: [true, 'Le type est requis'],
     enum: [
@@ -69,7 +69,7 @@ const equipmentSchema = new mongoose.Schema({
   statut: {
     type: String,
     required: true,
-    enum: ['Disponible', 'Hors service', 'Maintenance'],
+    enum: ['Disponible', 'Hors service', 'Maintenance', "Occupé"],
     default: 'Disponible'
   }
 }, {

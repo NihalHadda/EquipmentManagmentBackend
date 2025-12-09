@@ -7,6 +7,8 @@ require("dotenv").config();
 const usersRouter = require("./routes/userRoutes");
 const authRouter = require("./routes/authRoutes");
 const roleRouter = require("./routes/roleRoutes");
+const equipmentRouter = require("./routes/equipmentRoutes.js");  // <-- AJOUTÉ
+const reservationRoutes = require("./routes/reservationRoutes");
 
 const createApp = () => {
   const app = express();
@@ -20,6 +22,8 @@ const createApp = () => {
   app.use("/api/users", usersRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/roles", roleRouter);
+  app.use("/api/equipments", equipmentRouter); // <-- AJOUTÉ
+  app.use("/api/reservations", reservationRoutes);
 
   // Health Check Route
   app.get("/health", (req, res) => {
