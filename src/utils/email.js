@@ -1,25 +1,24 @@
-const nodemailer = require("nodemailer");
+const transporter = require('../config/emailConfig');
 
-// Configuration du transporteur SMTP (ex: Gmail)
-const transporter = nodemailer.createTransport({
-  service: "Gmail",
-  auth: {
-    user: "tonemail@gmail.com",
-    pass: "tonmotdepasse" // ou mot de passe spécifique d'application
-  }
-});
-
-const sendEmail = async ({ to, subject, text }) => {
+const sendEmail = async ({ to, subject, text, html }) => {
   try {
-    await transporter.sendMail({
-      from: '"Gestion Équipements" <tonemail@gmail.com>',
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
       to,
       subject,
-      text
-    });
-    console.log("Email envoyé à", to);
+      text,
+      html: html || `<p>${text}</p>`
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Email envoyé avec succès:', info.messageId);
+    return { 
+      success: true, 
+      messageId: info.messageId 
+    };
   } catch (error) {
-    console.error("Erreur lors de l'envoi de l'email :", error);
+    console.error('❌ Erreur lors de l\'envoi de l\'email:', error);
+    throw error;
   }
 };
 
