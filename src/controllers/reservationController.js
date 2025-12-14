@@ -317,3 +317,27 @@ exports.processReservation = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+/src/controllers/reservationController.js
+// Ajoute cette fonction à ton controller
+
+exports.deleteReservation = async (req, res) => {
+  try {
+    const reservationId = req.params.id;
+
+    const reservation = await Reservation.findById(reservationId);
+    
+    if (!reservation) {
+      return res.status(404).json({ message: "Réservation introuvable." });
+    }
+
+    await Reservation.findByIdAndDelete(reservationId);
+
+    return res.json({
+      message: "Réservation supprimée avec succès."
+    });
+
+  } catch (error) {
+    console.error("Erreur deleteReservation :", error);
+    return res.status(500).json({ message: "Erreur serveur." });
+  }
+};

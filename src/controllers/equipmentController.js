@@ -68,17 +68,17 @@ exports.createEquipment = async (req, res) => {
     });
   }
 };
-
-// Obtenir tous les équipements
+// Récupérer tous les équipements, avec filtres
+// Obtenir tous les équipements (avec filtres)
 exports.getAllEquipments = async (req, res) => {
   try {
-    const { statut, localisation, type } = req.query;
+    const { statut, localisation, type, category } = req.query;
 
-    // Construire le filtre de recherche
     const filter = {};
     if (statut) filter.statut = statut;
     if (localisation) filter.localisation = localisation;
     if (type) filter.type = type;
+    if (category) filter.category = category;
 
     const equipments = await Equipment.find(filter).sort({ createdAt: -1 });
 
@@ -95,6 +95,7 @@ exports.getAllEquipments = async (req, res) => {
     });
   }
 };
+
 
 // Obtenir un équipement par ID
 exports.getEquipmentById = async (req, res) => {

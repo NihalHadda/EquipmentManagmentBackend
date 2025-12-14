@@ -7,5 +7,5 @@ const { protect } = require('../middleware/authMiddleware');
 router.post('/', protect, reservationController.createReservation);
 router.put('/:id', protect, reservationController.updateReservation);
 router.get('/:id', protect, reservationController.getReservationById);
-
+router.delete('/:id', protect, reservationController.deleteReservation);
 module.exports = router;
