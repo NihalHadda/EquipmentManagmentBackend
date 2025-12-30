@@ -5,19 +5,19 @@ const equipmentController = require('../controllers/equipmentController');
 // Créer un nouvel équipement
 router.post('/', equipmentController.createEquipment);
 
-// Obtenir tous les équipements
+// Obtenir tous les équipements (avec filtres optionnels : statut, type, localisation)
 router.get('/', equipmentController.getAllEquipments);
 
 // Obtenir un équipement par ID
 router.get('/:id', equipmentController.getEquipmentById);
 
-// Mettre à jour un équipement
+// Mettre à jour un équipement par ID
 router.put('/:id', equipmentController.updateEquipment);
 
-// Supprimer un équipement
+// Supprimer un équipement par ID
 router.delete('/:id', equipmentController.deleteEquipment);
 
-// Statistiques
+// Obtenir les statistiques des équipements
 router.get('/stats/all', equipmentController.getEquipmentStats);
 
 module.exports = router;

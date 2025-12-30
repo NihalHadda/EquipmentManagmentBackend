@@ -1,50 +1,71 @@
-
-
 const jwt = require("jsonwebtoken");
 const User = require("../models/user");
 require("dotenv").config();
 
-// ---------------------- PROTECT (auth middleware) ----------------------
+/**
+ * =========================
+ * PROTECT – Middleware d'authentification
+ * =========================
+ */
 exports.protect = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-
-  if (!token)
-    return res.status(401).json({ message: "Accès refusé : token manquant" });
-
   try {
-    // Vérifier le token
-    const decoded = jwt.verify(
-      token,
-      process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET
-    );
+    const authHeader = req.headers.authorization;
 
-    // Charger l'utilisateur depuis la DB + role
-    const user = await User.findById(decoded.id).populate("role");
-    if (!user)
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Accès refusé, token manquant" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    // Vérification du token
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+
+    // Récupérer l'utilisateur et son rôle
+    const user = await User.findById(decoded.id)
+      .populate("role", "name")
+      .select("-password");
+
+    if (!user) {
       return res.status(401).json({ message: "Utilisateur introuvable" });
+    }
 
-    req.user = user;
+    // Normaliser rôle en string
+    req.user = {
+      ...user.toObject(),
+      role: user.role ? user.role.name : null
+    };
+
     next();
-
   } catch (err) {
-    return res.status(401).json({ message: "Token invalide" });
+    console.error("❌ Erreur auth:", err.message);
+
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expiré, reconnectez-vous" });
+    }
+
+    if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Token invalide" });
+    }
+
+    res.status(401).json({ message: "Erreur d'authentification" });
   }
 };
 
-// ---------------------- AUTHORIZE ROLE ----------------------
-exports.authorizeRole = (requiredRole) => {
+/**
+ * =========================
+ * AUTHORIZE ROLE – Middleware d'autorisation
+ * =========================
+ */
+exports.authorizeRole = (...roles) => {
   return (req, res, next) => {
     if (!req.user || !req.user.role) {
-      return res.status(403).json({ message: "Accès refusé" });
+      return res.status(403).json({ message: "Accès refusé - Aucun rôle trouvé" });
     }
 
-    // Case : role object (populate) → use role.name
-    const roleName = typeof req.user.role === "string"
-      ? req.user.role
-      : req.user.role.name;
-
-    if (roleName !== requiredRole) {
-      return res.status(403).json({ message: "Permission refusée" });
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ 
+        message: `Permission refusée - Rôle requis: ${roles.join(", ")}` 
+      });
     }
 
     next();

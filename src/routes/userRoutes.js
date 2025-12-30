@@ -1,17 +1,21 @@
 const router = require("express").Router();
 const userCtrl = require("../controllers/userController");
-const { protect, authorizeRole } = require("../middleware/authMiddleware");
+const { protect } = require("../middleware/authMiddleware");
 
 // Admin-only: list all users
-router.get("/", protect, authorizeRole("admin"), userCtrl.getUsers);
+router.get("/", protect, userCtrl.getUsers);
 
-// Get single user (admin OR owner)
+// Get single user
 router.get("/:id", protect, userCtrl.getUserById);
 
-// Update (admin OR owner)
+// Update user
 router.put("/:id", protect, userCtrl.updateUser);
 
-// Delete user (admin)
-router.delete("/:id", protect, authorizeRole("admin"), userCtrl.deleteUser);
+// Delete user
+router.delete("/:id", protect, userCtrl.deleteUser);
+
+// Forgot & reset password (public)
+router.post("/forgot-password", userCtrl.forgotPassword);
+router.post("/reset-password/:token", userCtrl.resetPassword);
 
 module.exports = router;

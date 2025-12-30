@@ -1,15 +1,22 @@
 const Equipment = require("../models/Equipment");
 const Reservation = require("../models/Reservation");
-const sendEmail = require("../utils/email");
+const {
+  sendPendingReservationEmail,
+  sendApprovedReservationEmail,
+  sendRejectedReservationEmail
+} = require("../services/emailService");
 
-// ---------------------- CREATE RESERVATION ----------------------
+
+// =====================================================
+// CREATE RESERVATION (USER)
+// =====================================================
 exports.createReservation = async (req, res) => {
   try {
     const { equipmentId, startDate, endDate, description, quantity } = req.body;
-    const equipment = await Equipment.findById(equipmentId);
 
+    const equipment = await Equipment.findById(equipmentId);
     if (!equipment) {
-      return res.status(404).json({ message: 'Équipement non trouvé' });
+      return res.status(404).json({ message: "Équipement non trouvé." });
     }
 
     if (!quantity || quantity <= 0) {
@@ -18,7 +25,7 @@ exports.createReservation = async (req, res) => {
 
     if (quantity > equipment.capacite.valeur) {
       return res.status(400).json({
-        message: `La quantité demandée (${quantity}) dépasse la capacité maximale (${equipment.capacite.valeur} ${equipment.capacite.unite}).`
+        message: `La quantité demandée dépasse la capacité maximale (${equipment.capacite.valeur} ${equipment.capacite.unite}).`
       });
     }
 
@@ -26,16 +33,21 @@ exports.createReservation = async (req, res) => {
       return res.status(400).json({ message: "La date de fin doit être après la date de début." });
     }
 
-    // Vérifier les conflits
+    // Vérifier conflits avec réservations approuvées
     const conflict = await Reservation.findOne({
       equipment: equipmentId,
-      $or: [
-        { startDate: { $lt: new Date(endDate) }, endDate: { $gt: new Date(startDate) } }
-      ]
+      status: "approved",
+      startDate: { $lt: new Date(endDate) },
+      endDate: { $gt: new Date(startDate) }
     });
 
-    // Créer la réservation avec un statut par défaut "pending"
-    const reservation = new Reservation({
+    if (conflict) {
+      return res.status(400).json({
+        message: "Il existe déjà une réservation approuvée pour ces dates."
+      });
+    }
+
+    const reservation = await Reservation.create({
       equipment: equipmentId,
       user: req.user.id,
       startDate,
@@ -45,132 +57,50 @@ exports.createReservation = async (req, res) => {
       status: "pending"
     });
 
-    // Approuver ou refuser automatiquement
-    if (equipment.statut !== "Disponible") {
-      reservation.status = "rejected";
-    } else if (conflict) {
-      reservation.status = "rejected";
-    } else {
-      reservation.status = "approved";
-    }
-
-    // Si la réservation est approuvée, mettre l'équipement en "Occupé"
-    if (reservation.status === "approved") {
-      equipment.statut = "Occupé";
-      await equipment.save();
-    }
-
-    await reservation.save();
-
-    // 📧 ENVOYER L'EMAIL DE CONFIRMATION
+    // Email pending
     try {
-      const user = req.user;
-      const statusMessage = reservation.status === "approved" ? "approuvée ✅" : "refusée ❌";
-      const statusColor = reservation.status === "approved" ? "#4CAF50" : "#f44336";
-      
-      await sendEmail({
-        to: user.email,
-        subject: `Réservation ${reservation.status === "approved" ? "approuvée" : "refusée"} - ${equipment.nom}`,
-        text: `Bonjour ${user.username || 'Utilisateur'},\n\nVotre réservation pour ${equipment.nom} a été ${statusMessage}.\n\nDétails:\n- Date début: ${startDate}\n- Date fin: ${endDate}\n- Quantité: ${quantity}\n- Statut: ${reservation.status}\n\nMerci d'utiliser notre service!`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-            <h2 style="color: ${statusColor}; text-align: center;">
-              Réservation ${statusMessage}
-            </h2>
-            <p>Bonjour <strong>${user.username || 'Utilisateur'}</strong>,</p>
-            <p>Votre réservation pour <strong>${equipment.nom}</strong> a été <strong style="color: ${statusColor};">${statusMessage}</strong>.</p>
-            
-            <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${statusColor};">
-              <h3 style="margin-top: 0; color: #333;">📋 Détails de la réservation</h3>
-              <table style="width: 100%; line-height: 2;">
-                <tr>
-                  <td style="padding: 5px 0;"><strong>Équipement:</strong></td>
-                  <td style="padding: 5px 0;">${equipment.nom}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 5px 0;"><strong>Date de début:</strong></td>
-                  <td style="padding: 5px 0;">${new Date(startDate).toLocaleDateString('fr-FR')}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 5px 0;"><strong>Date de fin:</strong></td>
-                  <td style="padding: 5px 0;">${new Date(endDate).toLocaleDateString('fr-FR')}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 5px 0;"><strong>Quantité:</strong></td>
-                  <td style="padding: 5px 0;">${quantity} ${equipment.capacite.unite}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 5px 0;"><strong>Statut:</strong></td>
-                  <td style="padding: 5px 0; color: ${statusColor}; font-weight: bold;">${reservation.status.toUpperCase()}</td>
-                </tr>
-                ${description ? `
-                <tr>
-                  <td style="padding: 5px 0;"><strong>Description:</strong></td>
-                  <td style="padding: 5px 0;">${description}</td>
-                </tr>
-                ` : ''}
-              </table>
-            </div>
-            
-            ${reservation.status === "rejected" ? `
-              <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107;">
-                <strong>⚠️ Raison du refus:</strong>
-                <p style="margin: 5px 0 0 0;">
-                  ${equipment.statut !== "Disponible" 
-                    ? "L'équipement n'est pas disponible actuellement." 
-                    : "Il y a un conflit avec une autre réservation pour ces dates."}
-                </p>
-              </div>
-            ` : `
-              <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; border-left: 4px solid #28a745;">
-                <strong>✅ Réservation confirmée!</strong>
-                <p style="margin: 5px 0 0 0;">Vous pouvez récupérer l'équipement à partir du ${new Date(startDate).toLocaleDateString('fr-FR')}.</p>
-              </div>
-            `}
-            
-            <p style="margin-top: 30px; color: #666; font-size: 14px; text-align: center;">
-              Merci d'utiliser notre service de gestion d'équipements! 🎉
-            </p>
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="color: #999; font-size: 12px; text-align: center;">
-              Cet email a été envoyé automatiquement, merci de ne pas y répondre.
-            </p>
-          </div>
-        `
-      });
-      
-      console.log('✅ Email de confirmation envoyé à:', user.email);
-      
-    } catch (emailError) {
-      console.error('⚠️ Erreur lors de l\'envoi de l\'email:', emailError.message);
-      // On continue même si l'email échoue, la réservation est déjà créée
+      await sendPendingReservationEmail(
+        req.user.email,
+        req.user.username,
+        {
+          equipmentName: equipment.nom,
+          startDate: new Date(startDate).toLocaleDateString("fr-FR"),
+          endDate: new Date(endDate).toLocaleDateString("fr-FR"),
+          quantity: `${quantity} ${equipment.capacite.unite}`,
+          description: description || ""
+        }
+      );
+    } catch (err) {
+      console.error("Email pending error:", err.message);
     }
 
-    return res.status(201).json({
-      message: `Réservation ${reservation.status === "approved" ? "approuvée" : "refusée"} automatiquement.`,
-      reservation,
-      emailSent: true
+    res.status(201).json({
+      message: "Réservation créée (en attente de validation).",
+      reservation
     });
 
   } catch (error) {
-    console.error("Erreur lors de la création de la réservation :", error);
-    return res.status(500).json({ 
-      message: "Erreur serveur.",
-      error: error.message
-    });
+    console.error("createReservation error:", error);
+    res.status(500).json({ message: "Erreur serveur." });
   }
 };
 
 
-// ---------------------- UPDATE RESERVATION ----------------------
+// =====================================================
+// UPDATE RESERVATION (USER)
+// =====================================================
 exports.updateReservation = async (req, res) => {
   try {
-    const reservationId = req.params.id;
+    const { id } = req.params;
     const { equipmentId, startDate, endDate, description, quantity } = req.body;
 
-    const reservation = await Reservation.findById(reservationId);
+    const reservation = await Reservation.findById(id);
     if (!reservation) {
       return res.status(404).json({ message: "Réservation introuvable." });
+    }
+
+    if (reservation.status !== "pending") {
+      return res.status(400).json({ message: "Impossible de modifier une réservation traitée." });
     }
 
     const equipment = await Equipment.findById(equipmentId);
@@ -179,165 +109,214 @@ exports.updateReservation = async (req, res) => {
     }
 
     if (new Date(startDate) >= new Date(endDate)) {
-      return res.status(400).json({ message: "La date de fin doit être après la date de début." });
+      return res.status(400).json({ message: "Dates invalides." });
     }
 
-    if (quantity !== undefined) {
-      if (quantity <= 0 || quantity > equipment.capacite.valeur) {
-        return res.status(400).json({ message: "Quantité invalide." });
-      }
-      reservation.quantity = quantity;
+    if (quantity <= 0 || quantity > equipment.capacite.valeur) {
+      return res.status(400).json({ message: "Quantité invalide." });
     }
 
-    // Vérifier les conflits avec les autres réservations
     const conflict = await Reservation.findOne({
       equipment: equipmentId,
-      _id: { $ne: reservationId },
-      $or: [
-        { startDate: { $lt: new Date(endDate) }, endDate: { $gt: new Date(startDate) } }
-      ]
+      _id: { $ne: id },
+      status: "approved",
+      startDate: { $lt: new Date(endDate) },
+      endDate: { $gt: new Date(startDate) }
     });
 
-    // Mettre à jour les infos
+    if (conflict) {
+      return res.status(400).json({ message: "Conflit avec une réservation approuvée." });
+    }
+
     reservation.equipment = equipmentId;
     reservation.startDate = startDate;
     reservation.endDate = endDate;
-    if (description !== undefined) reservation.description = description;
-
-    // Mettre à jour le statut automatiquement
-    if (equipment.statut !== "Disponible" || conflict) {
-      reservation.status = "rejected";
-    } else {
-      reservation.status = "approved";
-    }
+    reservation.description = description;
+    reservation.quantity = quantity;
 
     await reservation.save();
 
-    return res.json({
-      message: `Réservation ${reservation.status === "approved" ? "approuvée" : "refusée"} après mise à jour.`,
-      reservation
-    });
+    res.json({ message: "Réservation mise à jour.", reservation });
 
   } catch (error) {
-    console.error("Erreur updateReservation :", error);
-    return res.status(500).json({ message: "Erreur serveur." });
+    console.error("updateReservation error:", error);
+    res.status(500).json({ message: "Erreur serveur." });
   }
 };
 
 
-// ---------------------- GET RESERVATION BY ID ----------------------
+// =====================================================
+// GET RESERVATION BY ID
+// =====================================================
 exports.getReservationById = async (req, res) => {
   try {
-    const reservationId = req.params.id;
-    const reservation = await Reservation.findById(reservationId).populate("equipment user");
+    const reservation = await Reservation.findById(req.params.id)
+      .populate("equipment")
+      .populate("user", "username email");
+
     if (!reservation) {
       return res.status(404).json({ message: "Réservation introuvable." });
     }
-    return res.json({ reservation });
+
+    res.json({ reservation });
+
   } catch (error) {
-    console.error("Erreur getReservationById :", error);
-    return res.status(500).json({ message: "Erreur serveur." });
+    console.error("getReservationById error:", error);
+    res.status(500).json({ message: "Erreur serveur." });
   }
 };
 
-// ---------------------- PROCESS RESERVATION ----------------------
-exports.processReservation = async (req, res) => {
+
+// =====================================================
+// DELETE RESERVATION
+// =====================================================
+exports.deleteReservation = async (req, res) => {
   try {
-    const reservationId = req.params.id;
-    const reservation = await Reservation.findById(reservationId).populate("equipment user");
-    if (!reservation) return res.status(404).json({ message: "Réservation introuvable." });
+    const reservation = await Reservation.findById(req.params.id);
+    if (!reservation) {
+      return res.status(404).json({ message: "Réservation introuvable." });
+    }
 
-    const equipment = reservation.equipment;
-    let mailMessage = "";
-    let statusColor = "";
+    await reservation.deleteOne();
+    res.json({ message: "Réservation supprimée." });
 
-    // Vérifier la disponibilité
-    if (equipment.statut !== "Disponible") {
-      reservation.status = "rejected";
-      statusColor = "#f44336";
-      mailMessage = `Bonjour ${reservation.user.username}, votre réservation pour ${equipment.nom} a été refusée car l'équipement est indisponible.`;
-    } else {
+  } catch (error) {
+    console.error("deleteReservation error:", error);
+    res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
+
+// =====================================================
+// ADMIN - GET PENDING RESERVATIONS
+// =====================================================
+exports.getPendingReservations = async (req, res) => {
+  try {
+    const reservations = await Reservation.find({ status: "pending" })
+      .populate("equipment")
+      .populate("user", "username email")
+      .sort({ createdAt: -1 });
+
+    res.json({ count: reservations.length, reservations });
+
+  } catch (error) {
+    console.error("getPendingReservations error:", error);
+    res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
+
+// =====================================================
+// ADMIN - UPDATE STATUS (APPROVE / REJECT)
+// =====================================================
+exports.updateReservationStatus = async (req, res) => {
+  try {
+    const { status, rejectionReason } = req.body;
+    const { id } = req.params;
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Statut invalide." });
+    }
+
+    const reservation = await Reservation.findById(id)
+      .populate("equipment")
+      .populate("user", "username email");
+
+    if (!reservation) {
+      return res.status(404).json({ message: "Réservation introuvable." });
+    }
+
+    if (reservation.status !== "pending") {
+      return res.status(400).json({ message: "Réservation déjà traitée." });
+    }
+
+    if (status === "approved") {
       const conflict = await Reservation.findOne({
-        equipment: equipment._id,
-        _id: { $ne: reservationId },
-        $or: [
-          { startDate: { $lt: reservation.endDate }, endDate: { $gt: reservation.startDate } }
-        ]
+        equipment: reservation.equipment._id,
+        status: "approved",
+        startDate: { $lt: reservation.endDate },
+        endDate: { $gt: reservation.startDate }
       });
 
       if (conflict) {
-        reservation.status = "rejected";
-        statusColor = "#f44336";
-        mailMessage = `Bonjour ${reservation.user.username}, votre réservation pour ${equipment.nom} a été refusée à cause d'un conflit de créneau.`;
-      } else {
-        reservation.status = "approved";
-        statusColor = "#4CAF50";
-        equipment.statut = "Occupé";
-        await equipment.save();
-        mailMessage = `Bonjour ${reservation.user.username}, votre réservation pour ${equipment.nom} a été approuvée.`;
+        return res.status(400).json({ message: "Conflit de réservation." });
       }
+
+      reservation.equipment.statut = "Occupé";
+      await reservation.equipment.save();
     }
 
+    reservation.status = status;
     await reservation.save();
 
-    // 📧 Envoyer le mail avec HTML
     try {
-      await sendEmail({
-        to: reservation.user.email,
-        subject: `Statut de votre réservation pour ${equipment.nom}`,
-        text: mailMessage,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: ${statusColor};">Statut de votre réservation</h2>
-            <p>${mailMessage}</p>
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <strong>Détails:</strong>
-              <ul>
-                <li>Équipement: ${equipment.nom}</li>
-                <li>Date début: ${new Date(reservation.startDate).toLocaleDateString('fr-FR')}</li>
-                <li>Date fin: ${new Date(reservation.endDate).toLocaleDateString('fr-FR')}</li>
-                <li>Statut: <span style="color: ${statusColor}; font-weight: bold;">${reservation.status.toUpperCase()}</span></li>
-              </ul>
-            </div>
-          </div>
-        `
-      });
-      console.log('✅ Email envoyé à:', reservation.user.email);
-    } catch (emailError) {
-      console.error('⚠️ Erreur email:', emailError.message);
+      const emailData = {
+        equipmentName: reservation.equipment.nom,
+        startDate: reservation.startDate.toLocaleDateString("fr-FR"),
+        endDate: reservation.endDate.toLocaleDateString("fr-FR"),
+        quantity: `${reservation.quantity} ${reservation.equipment.capacite.unite}`
+      };
+
+      if (status === "approved") {
+        await sendApprovedReservationEmail(
+          reservation.user.email,
+          reservation.user.username,
+          emailData
+        );
+      } else {
+        await sendRejectedReservationEmail(
+          reservation.user.email,
+          reservation.user.username,
+          emailData,
+          rejectionReason
+        );
+      }
+    } catch (err) {
+      console.error("Email error:", err.message);
     }
 
-    return res.status(200).json({ 
-      message: "Réservation traitée et mail envoyé.", 
-      reservation 
-    });
+    res.json({ message: "Statut mis à jour.", reservation });
 
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Erreur serveur." });
+    console.error("updateReservationStatus error:", error);
+    res.status(500).json({ message: "Erreur serveur." });
   }
 };
-/src/controllers/reservationController.js
-// Ajoute cette fonction à ton controller
 
-exports.deleteReservation = async (req, res) => {
-  try {
-    const reservationId = req.params.id;
 
-    const reservation = await Reservation.findById(reservationId);
-    
-    if (!reservation) {
-      return res.status(404).json({ message: "Réservation introuvable." });
-    }
+// =====================================================
+// ADMIN - EXTRA ROUTES (NECESSARY)
+// =====================================================
+exports.getAllReservations = async (req, res) => {
+  const reservations = await Reservation.find()
+    .populate("equipment")
+    .populate("user", "username email")
+    .sort({ createdAt: -1 });
 
-    await Reservation.findByIdAndDelete(reservationId);
+  res.json({ count: reservations.length, reservations });
+};
 
-    return res.json({
-      message: "Réservation supprimée avec succès."
-    });
+exports.getApprovedReservations = async (req, res) => {
+  const reservations = await Reservation.find({ status: "approved" })
+    .populate("equipment")
+    .populate("user", "username email");
 
-  } catch (error) {
-    console.error("Erreur deleteReservation :", error);
-    return res.status(500).json({ message: "Erreur serveur." });
-  }
+  res.json({ count: reservations.length, reservations });
+};
+
+exports.getRejectedReservations = async (req, res) => {
+  const reservations = await Reservation.find({ status: "rejected" })
+    .populate("equipment")
+    .populate("user", "username email");
+
+  res.json({ count: reservations.length, reservations });
+};
+
+exports.getReservationStats = async (req, res) => {
+  res.json({
+    total: await Reservation.countDocuments(),
+    pending: await Reservation.countDocuments({ status: "pending" }),
+    approved: await Reservation.countDocuments({ status: "approved" }),
+    rejected: await Reservation.countDocuments({ status: "rejected" })
+  });
 };
