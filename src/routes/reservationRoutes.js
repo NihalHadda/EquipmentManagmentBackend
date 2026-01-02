@@ -6,6 +6,7 @@ const { protect, authorizeRole } = require('../middleware/authMiddleware');
 /* ======================================================
    ROUTES ADMIN (TOUJOURS AVANT LES ROUTES AVEC :id)
    ====================================================== */
+router.get('/test/availability', reservationController.checkEquipmentAvailability);
 
 // 📊 Statistiques (cards en haut)
 router.get(
@@ -19,7 +20,7 @@ router.get(
 router.get(
   '/',
   protect,
-  authorizeRole('admin'),
+  //authorizeRole('admin'),
   reservationController.getAllReservations
 );
 

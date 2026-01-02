@@ -6,12 +6,153 @@ const {
   sendRejectedReservationEmail
 } = require("../services/emailService");
 
+exports.checkEquipmentAvailability = async (req, res) => {
+  try {
+    const { equipmentId, startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ 
+        message: "Les dates de début et de fin sont requises" 
+      });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Si un équipement spécifique est demandé
+    if (equipmentId && equipmentId !== 'all') {
+      const equipment = await Equipment.findById(equipmentId);
+      
+      if (!equipment) {
+        return res.status(404).json({ message: "Équipement non trouvé" });
+      }
+
+      // Vérifier le statut de base
+      if (equipment.statut !== 'Disponible' && equipment.statut !== 'Occupé') {
+        return res.json({
+          available: false,
+          reason: `Équipement ${equipment.statut.toLowerCase()}`,
+          equipment,
+          capacityUsed: 0,
+          capacityTotal: equipment.capacite.valeur
+        });
+      }
+
+      // CORRECTION: Meilleure logique de chevauchement
+      // Deux périodes se chevauchent si:
+      // La réservation commence avant la fin de la période demandée
+      // ET la réservation se termine après le début de la période demandée
+      const overlappingReservations = await Reservation.find({
+        equipment: equipmentId,
+        status: { $in: ['pending', 'approved'] },
+        // Condition corrigée pour capturer tous les chevauchements
+        startDate: { $lt: end },      // La réservation commence avant la fin demandée
+        endDate: { $gt: start }        // La réservation se termine après le début demandé
+      }).populate('equipment user');
+
+      console.log('Période demandée:', { start, end });
+      console.log('Réservations trouvées:', overlappingReservations.length);
+      overlappingReservations.forEach(r => {
+        console.log('- Réservation:', {
+          id: r._id,
+          start: r.startDate,
+          end: r.endDate,
+          quantity: r.quantity
+        });
+      });
+
+      // Calculer la capacité utilisée
+      const capacityUsed = overlappingReservations.reduce((total, reservation) => {
+        return total + (reservation.quantity || 0);
+      }, 0);
+
+      const capacityAvailable = equipment.capacite.valeur - capacityUsed;
+      const isAvailable = capacityAvailable > 0;
+
+      return res.json({
+        available: isAvailable,
+        reason: isAvailable 
+          ? `${capacityAvailable} ${equipment.capacite.unite} disponible(s)` 
+          : "Capacité complètement réservée",
+        equipment,
+        capacityUsed,
+        capacityTotal: equipment.capacite.valeur,
+        capacityAvailable,
+        overlappingReservations: overlappingReservations.length,
+        reservationDetails: overlappingReservations.map(r => ({
+          id: r._id,
+          startDate: r.startDate,
+          endDate: r.endDate,
+          quantity: r.quantity,
+          status: r.status
+        }))
+      });
+    }
+
+    // Si aucun équipement spécifique, retourner tous les équipements avec leur disponibilité
+    const allEquipments = await Equipment.find();
+    const availabilityResults = [];
+
+    for (const equipment of allEquipments) {
+      // Vérifier le statut de base
+      if (equipment.statut !== 'Disponible' && equipment.statut !== 'Occupé') {
+        availabilityResults.push({
+          equipment,
+          available: false,
+          reason: `Équipement ${equipment.statut.toLowerCase()}`,
+          capacityUsed: 0,
+          capacityTotal: equipment.capacite.valeur,
+          capacityAvailable: 0
+        });
+        continue;
+      }
+
+      // CORRECTION: Même logique corrigée
+      const overlappingReservations = await Reservation.find({
+        equipment: equipment._id,
+        status: { $in: ['pending', 'approved'] },
+        startDate: { $lt: end },
+        endDate: { $gt: start }
+      });
+
+      const capacityUsed = overlappingReservations.reduce((total, reservation) => {
+        return total + (reservation.quantity || 0);
+      }, 0);
+
+      const capacityAvailable = equipment.capacite.valeur - capacityUsed;
+      const isAvailable = capacityAvailable > 0;
+
+      availabilityResults.push({
+        equipment,
+        available: isAvailable,
+        reason: isAvailable 
+          ? `${capacityAvailable} ${equipment.capacite.unite} disponible(s)` 
+          : "Capacité complètement réservée",
+        capacityUsed,
+        capacityTotal: equipment.capacite.valeur,
+        capacityAvailable,
+        overlappingReservations: overlappingReservations.length
+      });
+    }
+
+    return res.json({
+      results: availabilityResults,
+      period: { startDate, endDate }
+    });
+
+  } catch (error) {
+    console.error("Erreur checkEquipmentAvailability :", error);
+    return res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
 
 // =====================================================
 // CREATE RESERVATION (USER)
 // =====================================================
 exports.createReservation = async (req, res) => {
   try {
+    console.log("createReservation body:", req.user);
     const { equipmentId, startDate, endDate, description, quantity } = req.body;
 
     const equipment = await Equipment.findById(equipmentId);
@@ -49,7 +190,7 @@ exports.createReservation = async (req, res) => {
 
     const reservation = await Reservation.create({
       equipment: equipmentId,
-      user: req.user.id,
+      user: req.user._id || req.user.id,
       startDate,
       endDate,
       description,
@@ -288,12 +429,84 @@ exports.updateReservationStatus = async (req, res) => {
 // ADMIN - EXTRA ROUTES (NECESSARY)
 // =====================================================
 exports.getAllReservations = async (req, res) => {
-  const reservations = await Reservation.find()
-    .populate("equipment")
-    .populate("user", "username email")
-    .sort({ createdAt: -1 });
+  try {
+    const { equipmentId, startDate, endDate, availableOnly } = req.query;
+    
+    let filter = {};
+    
+    // Filtre par équipement
+    if (equipmentId && equipmentId !== 'all') {
+      filter.equipment = equipmentId;
+    }
+    
+    // Filtre par période - CORRECTION
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      // Condition corrigée pour capturer tous les chevauchements
+      filter.startDate = { $lt: end };
+      filter.endDate = { $gt: start };
+    } else if (startDate) {
+      filter.startDate = { $gte: new Date(startDate) };
+    } else if (endDate) {
+      filter.endDate = { $lte: new Date(endDate) };
+    }
+    
+    const reservations = await Reservation.find(filter)
+      .populate("equipment user")
+      .sort({ startDate: -1 });
 
-  res.json({ count: reservations.length, reservations });
+    // Si filtre de disponibilité activé
+    if (availableOnly === 'true' && startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      const filteredReservations = [];
+      
+      for (const reservation of reservations) {
+        const equipment = reservation.equipment;
+        
+        if (!equipment || (equipment.statut !== 'Disponible' && equipment.statut !== 'Occupé')) {
+          continue;
+        }
+
+        // CORRECTION: Même logique corrigée
+        const overlapping = await Reservation.find({
+          equipment: equipment._id,
+          _id: { $ne: reservation._id },
+          status: { $in: ['pending', 'approved'] },
+          startDate: { $lt: end },
+          endDate: { $gt: start }
+        });
+
+        const capacityUsed = overlapping.reduce((total, r) => {
+          return total + (r.quantity || 0);
+        }, 0);
+
+        const capacityAvailable = equipment.capacite.valeur - capacityUsed;
+        
+        if (capacityAvailable > 0) {
+          filteredReservations.push(reservation);
+        }
+      }
+
+      return res.json({ 
+        reservations: filteredReservations,
+        count: filteredReservations.length,
+        filters: { equipmentId, startDate, endDate, availableOnly }
+      });
+    }
+    
+    return res.json({ 
+      reservations,
+      count: reservations.length,
+      filters: { equipmentId, startDate, endDate }
+    });
+  } catch (error) {
+    console.error("Erreur getAllReservations :", error);
+    return res.status(500).json({ message: "Erreur serveur." });
+  }
 };
 
 exports.getApprovedReservations = async (req, res) => {
