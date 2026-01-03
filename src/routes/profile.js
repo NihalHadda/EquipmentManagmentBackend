@@ -1,32 +1,31 @@
+//routes/profile.js
+const express = require('express');
+const { protect } = require('../middleware/authMiddleware');
 
-import express from 'express';
-import { protect } from '../middleware/authMiddleware.js';
-import {
+const {
   getProfile,
   updateProfile,
   updateEmail,
   changePassword,
   deactivateAccount
-} from '../controllers/profileController.js';
+} = require('../controllers/profileController');
 
 const router = express.Router();
 
-// 🔐 Toutes les routes nécessitent l'authentification
+// 🔐 Auth middleware
 router.use(protect);
 
-// 👤 Récupérer le profil utilisateur
+// 👤 Profile
 router.get('/', getProfile);
-
-// ✏️ Mettre à jour le profil
 router.put('/', updateProfile);
 
-// 📧 Mettre à jour l'email
+// 📧 Email
 router.patch('/email', updateEmail);
 
-// 🔑 Changer le mot de passe
+// 🔑 Password
 router.patch('/password', changePassword);
 
-// 🚫 Désactiver le compte
+// 🚫 Deactivate
 router.delete('/', deactivateAccount);
 
-export default router;
+module.exports = router;
