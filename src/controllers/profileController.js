@@ -1,3 +1,4 @@
+//profileController.js
 const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const User = require('../models/User');

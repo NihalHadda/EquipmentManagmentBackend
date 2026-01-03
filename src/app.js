@@ -9,6 +9,7 @@ const authRouter = require('./routes/authRoutes');
 const roleRouter = require('./routes/roleRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes');
 const reservationRoutes = require('./routes/reservationRoutes');
+const profileRoutes = require('./routes/profile');
 
 const createApp = () => {
   const app = express();
@@ -36,6 +37,7 @@ const createApp = () => {
   app.use('/api/roles', roleRouter);
   app.use('/api/equipments', equipmentRoutes);
   app.use('/api/reservations', reservationRoutes);
+  app.use('/api/profile', profileRoutes);
 
   // =========================
   // Health Check
