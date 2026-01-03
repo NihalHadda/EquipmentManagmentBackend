@@ -1,5 +1,6 @@
 const Equipment = require("../models/Equipment");
 const Reservation = require("../models/Reservation");
+const mongoose = require("mongoose");
 const {
   sendPendingReservationEmail,
   sendApprovedReservationEmail,
@@ -431,26 +432,45 @@ exports.updateReservationStatus = async (req, res) => {
 exports.getAllReservations = async (req, res) => {
   try {
     const { equipmentId, startDate, endDate, availableOnly } = req.query;
+
+    console.debug("getAllReservations query:", req.query);
     
     let filter = {};
     
-    // Filtre par équipement
+    // Filtre par équipement - validation
     if (equipmentId && equipmentId !== 'all') {
+      if (!mongoose.Types.ObjectId.isValid(equipmentId)) {
+        return res.status(400).json({ message: "equipmentId invalide." });
+      }
       filter.equipment = equipmentId;
     }
     
-    // Filtre par période - CORRECTION
-    if (startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      
+    // Filtre par période - validation
+    let start = null;
+    let end = null;
+
+    if (startDate) {
+      start = new Date(startDate);
+      if (isNaN(start.getTime())) {
+        return res.status(400).json({ message: "startDate invalide." });
+      }
+    }
+
+    if (endDate) {
+      end = new Date(endDate);
+      if (isNaN(end.getTime())) {
+        return res.status(400).json({ message: "endDate invalide." });
+      }
+    }
+
+    if (start && end) {
       // Condition corrigée pour capturer tous les chevauchements
       filter.startDate = { $lt: end };
       filter.endDate = { $gt: start };
-    } else if (startDate) {
-      filter.startDate = { $gte: new Date(startDate) };
-    } else if (endDate) {
-      filter.endDate = { $lte: new Date(endDate) };
+    } else if (start) {
+      filter.startDate = { $gte: start };
+    } else if (end) {
+      filter.endDate = { $lte: end };
     }
     
     const reservations = await Reservation.find(filter)
