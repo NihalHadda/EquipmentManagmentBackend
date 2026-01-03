@@ -1,6 +1,7 @@
+//profileController.js
 const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
-const User = require('../models/User');
+const User = require('../models/user');
 
 // Validation helper
 exports.validateProfileUpdate = (data) => {
