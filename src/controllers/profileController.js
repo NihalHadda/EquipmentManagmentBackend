@@ -48,9 +48,19 @@ exports.getProfile = async (req, res) => {
       });
     }
 
+    // Transformer les noms des champs pour correspondre au frontend
+    const userData = user.toObject();
+    const formattedUser = {
+      ...userData,
+      firstName: userData.prenom || "",
+      lastName: userData.nom || "",
+      phoneNumber: userData.telephone || "",
+      bio: userData.bio || ""
+    };
+
     res.json({
       success: true,
-      data: user
+      data: formattedUser
     });
   } catch (error) {
     res.status(500).json({
