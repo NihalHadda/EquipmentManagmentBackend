@@ -388,8 +388,14 @@ exports.updateReservationStatus = async (req, res) => {
       await reservation.equipment.save();
     }
 
+    // Set status and record validator + time
     reservation.status = status;
+    reservation.validatedBy = req.user ? req.user._id : null;
+    reservation.validatedAt = new Date();
     await reservation.save();
+
+    // Populate validatedBy for response and emails
+    await reservation.populate('validatedBy', 'username email');
 
     try {
       const emailData = {
@@ -431,7 +437,7 @@ exports.updateReservationStatus = async (req, res) => {
 // =====================================================
 exports.getAllReservations = async (req, res) => {
   try {
-    const { equipmentId, startDate, endDate, availableOnly } = req.query;
+    const { equipmentId, startDate, endDate, createdStart, createdEnd, availableOnly } = req.query;
 
     console.debug("getAllReservations query:", req.query);
     
@@ -445,7 +451,7 @@ exports.getAllReservations = async (req, res) => {
       filter.equipment = equipmentId;
     }
     
-    // Filtre par période - validation
+    // Filtre par période - validation (période de réservation)
     let start = null;
     let end = null;
 
@@ -472,10 +478,41 @@ exports.getAllReservations = async (req, res) => {
     } else if (end) {
       filter.endDate = { $lte: end };
     }
-    
+
+    // Filtre par date de création de la réservation (createdAt)
+    let createdStartDate = null;
+    let createdEndDate = null;
+
+    if (createdStart) {
+      createdStartDate = new Date(createdStart);
+      if (isNaN(createdStartDate.getTime())) {
+        return res.status(400).json({ message: "createdStart invalide." });
+      }
+    }
+
+    if (createdEnd) {
+      createdEndDate = new Date(createdEnd);
+      if (isNaN(createdEndDate.getTime())) {
+        return res.status(400).json({ message: "createdEnd invalide." });
+      }
+    }
+
+    if (createdStartDate && createdEndDate) {
+      // make createdStart at 00:00:00 and createdEnd at 23:59:59.999 for inclusive day filtering
+      createdStartDate.setHours(0, 0, 0, 0);
+      createdEndDate.setHours(23, 59, 59, 999);
+      filter.createdAt = { $gte: createdStartDate, $lte: createdEndDate };
+    } else if (createdStartDate) {
+      createdStartDate.setHours(0, 0, 0, 0);
+      filter.createdAt = { $gte: createdStartDate };
+    } else if (createdEndDate) {
+      createdEndDate.setHours(23, 59, 59, 999);
+      filter.createdAt = { $lte: createdEndDate };
+    }
+
     const reservations = await Reservation.find(filter)
-      .populate("equipment user")
-      .sort({ startDate: -1 });
+      .populate("equipment user validatedBy", "nom username email")
+      .sort({ createdAt: -1 });
 
     // Si filtre de disponibilité activé
     if (availableOnly === 'true' && startDate && endDate) {
@@ -521,7 +558,7 @@ exports.getAllReservations = async (req, res) => {
     return res.json({ 
       reservations,
       count: reservations.length,
-      filters: { equipmentId, startDate, endDate }
+      filters: { equipmentId, startDate, endDate, createdStart, createdEnd }
     });
   } catch (error) {
     console.error("Erreur getAllReservations :", error);
@@ -531,16 +568,16 @@ exports.getAllReservations = async (req, res) => {
 
 exports.getApprovedReservations = async (req, res) => {
   const reservations = await Reservation.find({ status: "approved" })
-    .populate("equipment")
-    .populate("user", "username email");
+    .populate("equipment user validatedBy", "nom username email")
+    .sort({ createdAt: -1 });
 
   res.json({ count: reservations.length, reservations });
 };
 
 exports.getRejectedReservations = async (req, res) => {
   const reservations = await Reservation.find({ status: "rejected" })
-    .populate("equipment")
-    .populate("user", "username email");
+    .populate("equipment user validatedBy", "nom username email")
+    .sort({ createdAt: -1 });
 
   res.json({ count: reservations.length, reservations });
 };

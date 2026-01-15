@@ -25,7 +25,18 @@ const reservationSchema = new mongoose.Schema({
     type: String,
     enum: ["pending", "approved", "rejected"],
     default: "pending"
+  },
+
+  // Admin who validated/rejected the reservation
+  validatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Users",
+    default: null
+  },
+  validatedAt: {
+    type: Date,
+    default: null
   }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model("Reservation", reservationSchema);

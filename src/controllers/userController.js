@@ -96,25 +96,34 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const updates = req.body;
+    const allowedFields = ['nom', 'prenom', 'username', 'email', 'telephone', 'statut', 'password', 'roleName'];
+    
+    // Filtrer les champs autorisés
+    const filteredUpdates = {};
+    allowedFields.forEach(field => {
+      if (field in updates) {
+        filteredUpdates[field] = updates[field];
+      }
+    });
 
     // Changement du rôle
-    if (updates.roleName) {
-      const role = await Role.findOne({ name: updates.roleName });
+    if (filteredUpdates.roleName) {
+      const role = await Role.findOne({ name: { $regex: `^${filteredUpdates.roleName}$`, $options: "i" } });
       if (!role) {
         return res.status(400).json({ message: "Rôle invalide" });
       }
-      updates.role = role._id;
-      delete updates.roleName;
+      filteredUpdates.role = role._id;
+      delete filteredUpdates.roleName;
     }
 
     // Changement du mot de passe
-    if (updates.password) {
-      updates.password = await bcrypt.hash(updates.password, 12);
+    if (filteredUpdates.password) {
+      filteredUpdates.password = await bcrypt.hash(filteredUpdates.password, 12);
     }
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      updates,
+      filteredUpdates,
       { new: true }
     )
       .select("-password")

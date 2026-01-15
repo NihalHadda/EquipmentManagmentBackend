@@ -144,38 +144,72 @@ exports.login = async (req, res) => {
 // ====================== REGISTER ======================
 exports.register = async (req, res) => {
   try {
-    const { username, email, password, roleName } = req.body;
+    console.log("📩 REQ BODY:", JSON.stringify(req.body, null, 2));
+    
+    const { username, email, password, roleName, nom, prenom, telephone, statut } = req.body;
 
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: "Champs obligatoires manquants" });
+    // Validation des champs obligatoires
+    if (!username) {
+      console.log("❌ username manquant");
+      return res.status(400).json({ message: "Username est obligatoire" });
+    }
+    if (!email) {
+      console.log("❌ email manquant");
+      return res.status(400).json({ message: "Email est obligatoire" });
+    }
+    if (!password) {
+      console.log("❌ password manquant");
+      return res.status(400).json({ message: "Password est obligatoire" });
+    }
+    if (!roleName) {
+      console.log("❌ roleName manquant");
+      return res.status(400).json({ message: "RoleName est obligatoire" });
     }
 
+    // Vérifier email existe
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      console.log("❌ Email déjà utilisé:", email);
       return res.status(400).json({ message: "Email déjà utilisé" });
     }
 
-    // Recherche du rôle (insensible à la casse)
+    // Rechercher le rôle
+    console.log("🔍 Recherche rôle:", roleName);
     const role = await Role.findOne({
       name: { $regex: `^${roleName}$`, $options: "i" }
     });
-
+    
+    console.log("📌 Rôle trouvé:", role);
     if (!role) {
-      return res.status(400).json({ message: "Rôle non trouvé" });
+      console.log("❌ Rôle non trouvé. Rôles disponibles:");
+      const allRoles = await Role.find();
+      console.log(allRoles);
+      return res.status(400).json({ message: `Rôle "${roleName}" non trouvé` });
     }
 
+    // Hasher le mot de passe
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await User.create({
+    // Créer l'utilisateur
+    const newUser = await User.create({
+      nom: nom || "",
+      prenom: prenom || "",
       username,
       email,
       password: hashedPassword,
+      telephone: telephone || "",
+      statut: statut || "actif",
       role: role._id
     });
 
-    return res.status(201).json({ message: "Utilisateur créé avec succès" });
+    console.log("✅ Utilisateur créé:", newUser._id);
+    return res.status(201).json({ 
+      message: "Utilisateur créé avec succès",
+      user: newUser
+    });
 
   } catch (error) {
+    console.error("❌ ERREUR REGISTER:", error);
     return res.status(500).json({ message: error.message });
   }
 };
